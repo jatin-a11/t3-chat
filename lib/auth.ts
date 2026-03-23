@@ -79,6 +79,7 @@ export const authOptions: NextAuthOptions = {
   // JWT — DB session nahi
   session: {
     strategy: "jwt",
+    maxAge: 30 * 24 * 60 * 60, // 30 din
   },
 
   pages: {
