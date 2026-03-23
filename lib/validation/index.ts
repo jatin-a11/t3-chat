@@ -43,3 +43,14 @@ export const chatSchema = z.object({
   conversationId: z.string().min(1, "ConversationId chahiye"),
   model: z.string().default("llama-3.3-70b-versatile"),
 });
+
+
+
+
+// ========== TYPES — Schemas se auto generate ==========
+
+export type RegisterInput = z.infer<typeof registerSchema>;
+export type LoginInput = z.infer<typeof loginSchema>;
+export type CreateConversationInput = z.infer<typeof createConversationSchema>;
+export type UpdateConversationInput = z.infer<typeof updateConversationSchema>;
+export type ChatInput = z.infer<typeof chatSchema>
