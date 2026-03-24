@@ -46,7 +46,7 @@ export async function GET(req:Request){
       pinned:true,
       updatedAt:true,
       _count:{
-        select:{message:true}
+        select:{messages:true}
       }
 
     }
