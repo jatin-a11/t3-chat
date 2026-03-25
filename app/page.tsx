@@ -1,11 +1,17 @@
 import Navbar from "./components/Navbar";
+import Hero from "./components/Hero";
+import Features from "./components/Features";
+import Pricing from "./components/Pricing";
+import Footer from "./components/Footer";
 import Link from "next/link";
 
 export default function Home() {
   return (
     <>
       <Navbar />
-
+      <Hero />
+      <Features />
+      <Pricing />
 
       {/* CTA Section */}
       <section className="cta-section">
@@ -32,7 +38,7 @@ export default function Home() {
         </Link>
       </section>
 
-     
+      <Footer />
     </>
   );
 }
