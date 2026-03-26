@@ -1,39 +1,49 @@
-import { withAuth } from "next-auth/middleware";
-import { NextResponse } from "next/server";
+// middleware.ts  ← root mein hona chahiye (app ke bahar)
+import { getToken } from "next-auth/jwt";
+import { NextRequest, NextResponse } from "next/server";
 
-// IMPORTANT: "export default" hona zaroori hai
-export default withAuth(
-  function middleware(req) {
-    const token = req.nextauth.token;
-    const isAuth = !!token;
-    const isAuthPage = req.nextUrl.pathname.startsWith("/login") || 
-                       req.nextUrl.pathname.startsWith("/register");
+export async function middleware(req: NextRequest) {
+  const token = await getToken({
+    req,
+    secret: process.env.NEXTAUTH_SECRET,
+  });
 
-    // Agar user logged in hai aur login page par ja raha hai -> Home pe bhejo
-    if (isAuthPage) {
-      if (isAuth) {
-        return NextResponse.redirect(new URL("/", req.url));
-      }
-      return null;
-    }
+  const { pathname } = req.nextUrl;
 
-    // Agar user logged in nahi hai aur private page par hai -> NextAuth khud login pe bhej dega
-  },
-  {
-    callbacks: {
-      authorized: ({ token }) => {
-        // Agar token hai toh user authorized hai
-        return !!token;
-      },
-    },
-    // Login page ka path batana zaroori hai
-    pages: {
-      signIn: "/login",
-    },
+  // ===== PUBLIC ROUTES =====
+  // Landing page — sabke liye
+  if (pathname === "/") {
+    return NextResponse.next();
   }
-);
 
+  // ===== AUTH ROUTES =====
+  // Login/Register — agar already logged in hai → /chat
+  if (pathname === "/login" || pathname === "/register") {
+    if (token) {
+      return NextResponse.redirect(new URL("/chat", req.url));
+    }
+    return NextResponse.next();
+  }
+
+  // ===== PROTECTED ROUTES =====
+  // /chat/* — login nahi toh /login
+  if (pathname.startsWith("/chat")) {
+    if (!token) {
+      return NextResponse.redirect(new URL("/login", req.url));
+    }
+    return NextResponse.next();
+  }
+
+  return NextResponse.next();
+}
+
+// Middleware kin routes pe chalega
 export const config = {
-  // Kin paths par middleware chalana hai
-  matcher: ["/((?!api|_next/static|_next/image|favicon.ico).*)"],
+  matcher: [
+    "/",
+    "/login",
+    "/register",
+    "/chat",
+    "/chat/(.*)",
+  ],
 };

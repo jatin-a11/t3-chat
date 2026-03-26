@@ -1,6 +1,11 @@
+// components/navbar.tsx
 import Link from "next/link";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 
-export default function Navbar() {
+export default async function Navbar() {
+  const session = await getServerSession(authOptions);
+
   return (
     <nav className="nav">
       <Link href="/" className="logo">
@@ -22,10 +27,20 @@ export default function Navbar() {
       </div>
 
       <div className="nav-right">
-        <Link href="/login" className="btn-ghost">Sign in</Link>
-        <Link href="/register" className="btn-primary-nav">
-          Get started free
-        </Link>
+        {session ? (
+          // Logged in hai — Go to Chat dikhao
+          <Link href="/chat" className="btn-primary-nav">
+            Go to Chat →
+          </Link>
+        ) : (
+          // Logged in nahi — Sign in + Get started
+          <>
+            <Link href="/login" className="btn-ghost">Sign in</Link>
+            <Link href="/register" className="btn-primary-nav">
+              Get started free
+            </Link>
+          </>
+        )}
       </div>
     </nav>
   );
