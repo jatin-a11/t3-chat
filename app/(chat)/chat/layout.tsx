@@ -2,6 +2,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
+import { Sidebar } from "@/app/components/sidebar";
 
 export default async function ChatLayout({
   children,
@@ -25,8 +26,15 @@ export default async function ChatLayout({
 
   return (
     <div className="flex h-screen bg-[#0d0d0d]">
-      
-        
+      <Sidebar
+        conversations={conversations}
+        user={{
+          id: session.user.id,
+          name: session.user.name,
+          email: session.user.email,
+          image: session.user.image,
+        }}
+      />
       <main className="flex-1 overflow-hidden">
         {children}
       </main>
