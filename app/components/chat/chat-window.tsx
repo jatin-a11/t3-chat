@@ -1,11 +1,17 @@
 "use client";
 // components/chat/chat-window.tsx
-import { useChat } from "@ai-sdk/react";
+// Manual streaming — no useChat version issues
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { MessageBubble } from "./message-bubble";
 import { ThinkingIndicator } from "./thinking-indicator";
 import { EmptyState } from "./empty-state";
+
+type Message = {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+};
 
 export function ChatWindow({
   conversationId,
@@ -15,7 +21,7 @@ export function ChatWindow({
   userName,
 }: {
   conversationId?: string;
-  initialMessages?: any[];
+  initialMessages?: Message[];
   model?: string;
   title?: string;
   userName: string;
@@ -24,67 +30,14 @@ export function ChatWindow({
   const bottomRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const [convId, setConvId] = useState<string | undefined>(conversationId);
+  const abortRef = useRef<AbortController | null>(null);
+
+  const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [inputValue, setInputValue] = useState("");
-  const redirectedRef = useRef(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [convId, setConvId] = useState<string | undefined>(conversationId);
   const convIdRef = useRef<string | undefined>(conversationId);
-
-  // convIdRef sync karo
-  useEffect(() => {
-    convIdRef.current = convId;
-  }, [convId]);
-
-  const { messages, status, stop, append } = useChat({
-    api: "/api/chat",
-    initialMessages,
-    body: {
-      model,
-      get conversationId() {
-        return convIdRef.current;
-      },
-    },
-    onResponse: (response) => {
-      const newConvId = response.headers.get("x-conversation-id");
-      if (newConvId && !redirectedRef.current) {
-        redirectedRef.current = true;
-        setConvId(newConvId);
-        convIdRef.current = newConvId;
-
-        // Sidebar update
-        window.dispatchEvent(
-          new CustomEvent("new-conversation", {
-            detail: {
-              id: newConvId,
-              title: "New Chat",
-              model,
-              pinned: false,
-              updatedAt: new Date(),
-            },
-          })
-        );
-
-        // URL update without reload
-        router.replace(`/chat/${newConvId}`);
-      }
-    },
-    onFinish: (message) => {
-      // Title update sidebar mein
-      const cid = convIdRef.current;
-      if (cid) {
-        const userMsgs = messages.filter((m) => m.role === "user");
-        if (userMsgs.length > 0) {
-          const firstText = extractText(userMsgs[0]);
-          window.dispatchEvent(
-            new CustomEvent("update-conversation-title", {
-              detail: { id: cid, title: firstText.slice(0, 50) },
-            })
-          );
-        }
-      }
-    },
-  });
-
-  const isLoading = status === "streaming" || status === "submitted";
 
   // Auto resize textarea
   useEffect(() => {
@@ -104,40 +57,141 @@ export function ChatWindow({
     }
   }, [messages, isLoading]);
 
-  const handleSend = () => {
-    const trimmed = inputValue.trim();
-    if (!trimmed || isLoading) return;
-    setInputValue("");
-    append({ role: "user", content: trimmed });
+  const sendMessage = async (content: string) => {
+    if (!content.trim() || isLoading) return;
+
+    setError(null);
+
+    const userMsg: Message = {
+      id: crypto.randomUUID(),
+      role: "user",
+      content: content.trim(),
+    };
+
+    const updatedMessages = [...messages, userMsg];
+    setMessages(updatedMessages);
+    setIsLoading(true);
+
+    // Streaming AI response placeholder
+    const assistantId = crypto.randomUUID();
+    setMessages((prev) => [
+      ...prev,
+      { id: assistantId, role: "assistant", content: "" },
+    ]);
+
+    try {
+      abortRef.current = new AbortController();
+
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: updatedMessages.map((m) => ({
+            role: m.role,
+            content: m.content,
+          })),
+          conversationId: convIdRef.current,
+          model,
+        }),
+        signal: abortRef.current.signal,
+      });
+
+      if (!res.ok) throw new Error("Server error");
+
+      // convId header capture karo
+      const newConvId = res.headers.get("x-conversation-id");
+      if (newConvId && !convIdRef.current) {
+        convIdRef.current = newConvId;
+        setConvId(newConvId);
+
+        // Sidebar update
+        window.dispatchEvent(
+          new CustomEvent("new-conversation", {
+            detail: {
+              id: newConvId,
+              title: content.slice(0, 50),
+              model,
+              pinned: false,
+              updatedAt: new Date(),
+            },
+          })
+        );
+
+        router.replace(`/chat/${newConvId}`);
+      }
+
+      // Stream read karo
+      const reader = res.body?.getReader();
+      const decoder = new TextDecoder();
+      let fullText = "";
+
+      if (reader) {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const chunk = decoder.decode(value, { stream: true });
+          fullText += chunk;
+
+          // Real-time update
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantId ? { ...m, content: fullText } : m
+            )
+          );
+        }
+      }
+
+      // Title update sidebar mein
+      if (convIdRef.current && updatedMessages.length === 1) {
+        window.dispatchEvent(
+          new CustomEvent("update-conversation-title", {
+            detail: {
+              id: convIdRef.current,
+              title: content.slice(0, 50),
+            },
+          })
+        );
+      }
+    } catch (err: any) {
+      if (err?.name === "AbortError") {
+        // User ne stop kiya — theek hai
+      } else {
+        console.error("Chat error:", err);
+        setError("Kuch gadbad ho gayi — dobara try karo");
+        // Failed message hata do
+        setMessages((prev) => prev.filter((m) => m.id !== assistantId));
+      }
+    } finally {
+      setIsLoading(false);
+      abortRef.current = null;
+    }
+  };
+
+  const handleStop = () => {
+    abortRef.current?.abort();
+    setIsLoading(false);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      handleSend();
+      if (inputValue.trim() && !isLoading) {
+        sendMessage(inputValue);
+        setInputValue("");
+      }
+    }
+  };
+
+  const handleSubmit = () => {
+    if (inputValue.trim() && !isLoading) {
+      sendMessage(inputValue);
+      setInputValue("");
     }
   };
 
   const handlePromptClick = (prompt: string) => {
-    append({ role: "user", content: prompt });
-  };
-
-  const extractText = (message: any): string => {
-    if (!message) return "";
-    if (typeof message.content === "string") return message.content;
-    if (Array.isArray(message.parts)) {
-      return message.parts
-        .filter((p: any) => p.type === "text")
-        .map((p: any) => p.text ?? "")
-        .join("");
-    }
-    if (Array.isArray(message.content)) {
-      return message.content
-        .filter((c: any) => c.type === "text")
-        .map((c: any) => c.text ?? "")
-        .join("");
-    }
-    return "";
+    sendMessage(prompt);
   };
 
   const visibleMessages = messages.filter(
@@ -172,16 +226,16 @@ export function ChatWindow({
           <div style={{ padding: "32px 16px 24px" }}>
             <div style={{ maxWidth: "720px", margin: "0 auto", display: "flex", flexDirection: "column", gap: "24px" }}>
               {visibleMessages.map((msg) => (
-                <MessageBubble
-                  key={msg.id}
-                  message={{
-                    id: msg.id,
-                    role: msg.role as "user" | "assistant",
-                    content: extractText(msg),
-                  }}
-                />
+                <MessageBubble key={msg.id} message={msg} />
               ))}
-              {isLoading && <ThinkingIndicator />}
+              {isLoading && visibleMessages[visibleMessages.length - 1]?.role === "user" && (
+                <ThinkingIndicator />
+              )}
+              {error && (
+                <div style={{ padding: "12px 16px", background: "rgba(239,68,68,0.07)", border: "1px solid rgba(239,68,68,0.18)", borderRadius: "12px", color: "rgba(239,68,68,0.8)", fontSize: "13px", textAlign: "center" }}>
+                  {error}
+                </div>
+              )}
               <div ref={bottomRef} />
             </div>
           </div>
@@ -208,12 +262,12 @@ export function ChatWindow({
                 <span style={{ fontSize: "11px", color: "rgba(255,255,255,0.2)" }}>Llama 3.3 · 70B</span>
               </div>
               {isLoading ? (
-                <button onClick={stop} style={{ display: "flex", alignItems: "center", gap: "6px", padding: "6px 12px", borderRadius: "8px", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.5)", fontSize: "12px", fontWeight: "500", cursor: "pointer", fontFamily: "inherit" }}>
+                <button onClick={handleStop} style={{ display: "flex", alignItems: "center", gap: "6px", padding: "6px 12px", borderRadius: "8px", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.5)", fontSize: "12px", fontWeight: "500", cursor: "pointer", fontFamily: "inherit" }}>
                   <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2" /></svg>
                   Stop
                 </button>
               ) : (
-                <button onClick={handleSend} disabled={!inputValue.trim()} style={{ width: "34px", height: "34px", borderRadius: "10px", display: "flex", alignItems: "center", justifyContent: "center", cursor: inputValue.trim() ? "pointer" : "not-allowed", transition: "all 0.2s ease", border: "none", background: inputValue.trim() ? "linear-gradient(135deg, #6366f1, #8b5cf6)" : "rgba(255,255,255,0.05)", boxShadow: inputValue.trim() ? "0 4px 15px rgba(99,102,241,0.4)" : "none", opacity: inputValue.trim() ? 1 : 0.3 }}>
+                <button onClick={handleSubmit} disabled={!inputValue.trim()} style={{ width: "34px", height: "34px", borderRadius: "10px", display: "flex", alignItems: "center", justifyContent: "center", cursor: inputValue.trim() ? "pointer" : "not-allowed", transition: "all 0.2s ease", border: "none", background: inputValue.trim() ? "linear-gradient(135deg, #6366f1, #8b5cf6)" : "rgba(255,255,255,0.05)", boxShadow: inputValue.trim() ? "0 4px 15px rgba(99,102,241,0.4)" : "none", opacity: inputValue.trim() ? 1 : 0.3 }}>
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5"><path d="M12 19V5M5 12l7-7 7 7" /></svg>
                 </button>
               )}
