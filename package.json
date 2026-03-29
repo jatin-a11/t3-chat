@@ -9,14 +9,14 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@ai-sdk/groq": "^3.0.31",
-    "@ai-sdk/react": "^3.0.143",
+    "@ai-sdk/groq": "^0.0.3",
+    "@ai-sdk/react": "^0.0.70",
     "@auth/prisma-adapter": "^2.11.1",
     "@base-ui/react": "^1.3.0",
     "@prisma/client": "^6.19.2",
     "@upstash/ratelimit": "^2.0.8",
     "@upstash/redis": "^1.37.0",
-    "ai": "^6.0.141",
+    "ai": "^3.4.33",
     "bcryptjs": "^3.0.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
