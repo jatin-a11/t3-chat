@@ -65,7 +65,7 @@ model Message{
 
 // =========== FRIENDS =============
 model Friendship{
-  id          String            @default(cuid())
+  id          String            @id @default(cuid())
   status      FriendshipStatus  @default(PENDING) 
   createdAt   DateTime          @default(now())
 
@@ -78,4 +78,23 @@ model Friendship{
   @@unique([senderId,  receiverId])
   @@index([receiverId, status])
   @@index([senderId,   status])
+}
+
+
+// =========== DIRECT MESSAGES =============
+model DirectMessage {
+  id         String           @id  @default(cuid())
+  content    String           @db.Text
+  status     MessageStatus    @default(SENT) // <- SINGLE / DOUBLE
+  createdAt  DateTime         @default(now())
+
+  senderId   String
+  sender     User            @relation("SentMessages", fields:[senderId, references:[id]])
+
+  receiverId String
+  receiver   User           @relation("ReceivedMessages", fields:[receiverId], references:[id])
+
+  @@index([senderId,   receiverId])
+  @@index([receiverId, status])
+  @@index([senderId,   createdAt(sort:Desc)])
 }
