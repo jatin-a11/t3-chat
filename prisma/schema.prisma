@@ -12,6 +12,7 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ============ USER ==============
 model User{
   id        String   @id @default(cuid())
   name      String?
@@ -24,9 +25,13 @@ model User{
   provider  String   @default("credentials")
   createdAt DateTime @default(now())
 
+
+  // AI Chat
    conversations Conversation[]
 }
 
+
+// =========== AI CHAT ==============
 model Conversation{
   id        String @id @default(cuid())
   title     String     @default("New chat")
@@ -49,12 +54,28 @@ model Message{
   role           String
   content        String    @db.Text
   createdAt      DateTime  @default(now())
-  conversationId String
 
-   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
   @@index([conversationId])
   @@index([conversationId, createdAt])
 
+}
 
+// =========== FRIENDS =============
+model Friendship{
+  id          String            @default(cuid())
+  status      FriendshipStatus  @default(PENDING) 
+  createdAt   DateTime          @default(now())
+
+  senderId    String
+  sender      User             @relation("SentRequests", fields:[senderId], references:[id], onDelete: Cascade)
+
+  receiverId  String 
+  receiver    User             @relation("ReceivedRequests", fields:[receiverId], references:[id], onDelete: Cascade)
+
+  @@unique([senderId,  receiverId])
+  @@index([receiverId, status])
+  @@index([senderId,   status])
 }
