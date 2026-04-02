@@ -115,3 +115,18 @@ model GroupChat{
 
   @@index([updatedAt(sort:Desc)])
 }
+
+model GroupMember {
+  id       String     @id @default(cuid())
+  role     MemberRole @default(MEMBER)
+  joinedAt DateTime   @default(now())
+
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  groupChatId String
+  groupChat   GroupChat @relation(fields: [groupChatId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, groupChatId])
+  @@index([userId])
+   @@index([groupChatId])
+}
