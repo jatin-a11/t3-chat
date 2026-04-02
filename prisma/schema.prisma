@@ -130,3 +130,17 @@ model GroupMember {
   @@index([userId])
    @@index([groupChatId])
 }
+
+
+model GroupMessage {
+  id        String   @id @default(cuid())
+  content   String   @db.Text
+  createdAt DateTime @default(now())
+
+  senderId    String
+  sender      User      @relation(fields: [senderId], references: [id])
+  groupChatId String
+  groupChat   GroupChat @relation(fields: [groupChatId], references: [id], onDelete: Cascade)
+
+  @@index([groupChatId, createdAt(sort: Desc)])
+}
