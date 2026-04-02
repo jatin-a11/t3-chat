@@ -28,6 +28,23 @@ model User{
 
   // AI Chat
    conversations Conversation[]
+
+  // Friends
+  sentRequests     Friendship[] @relation("SentRequests")
+  receivedRequests Friendship[] @relation("ReceivedRequests")
+
+ // DM
+  sentMessages     DirectMessage[] @relation("SentMessages")
+  receivedMessages DirectMessage[] @relation("ReceivedMessages")
+
+  // Groups
+  groupMembers     GroupMember[]
+  groupMessages    GroupMessage[]
+  createdGroups    GroupChat[]     @relation("CreatedGroups")
+
+  @@index([username])
+  @@index([email])
+
 }
 
 
@@ -143,4 +160,24 @@ model GroupMessage {
   groupChat   GroupChat @relation(fields: [groupChatId], references: [id], onDelete: Cascade)
 
   @@index([groupChatId, createdAt(sort: Desc)])
+}
+
+
+// ========== ENUMS ==========
+enum FriendshipStatus {
+  PENDING
+  ACCEPTED
+  BLOCKED
+}
+
+enum MessageStatus {
+  SENT      // ✓  — bheja, deliver nahi
+  DELIVERED // ✓✓ — deliver hua (online tha)
+  READ      // ✓✓ — read kar liya (blue ticks)
+}
+
+enum MemberRole {
+  ADMIN
+  MODERATOR
+  MEMBER
 }
