@@ -1,7 +1,4 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
+// prisma/schema.prisma
 
 generator client {
   provider = "prisma-client-js"
@@ -13,49 +10,53 @@ datasource db {
 }
 
 // ============ USER ==============
-model User{
-  id        String   @id @default(cuid())
+model User {
+  id        String    @id @default(cuid())
   name      String?
-  email     String   @unique
+  email     String    @unique
   password  String?
   image     String?
-  username  String?  @unique
-  isOnline  Boolean  @default(false)
+  username  String?   @unique
+  isOnline  Boolean   @default(false)
   lastSeen  DateTime?
-  provider  String   @default("credentials")
-  createdAt DateTime @default(now())
-
+  provider  String    @default("credentials")
+  createdAt DateTime  @default(now())
 
   // AI Chat
-   conversations Conversation[]
+  conversations Conversation[]
 
   // Friends
-  sentRequests     Friendship[] @relation("SentRequests")
-  receivedRequests Friendship[] @relation("ReceivedRequests")
+  sentRequests     Friendship[]    @relation("SentRequests")
+  receivedRequests Friendship[]    @relation("ReceivedRequests")
 
- // DM
+  // DM
   sentMessages     DirectMessage[] @relation("SentMessages")
   receivedMessages DirectMessage[] @relation("ReceivedMessages")
 
   // Groups
-  groupMembers     GroupMember[]
-  groupMessages    GroupMessage[]
-  createdGroups    GroupChat[]     @relation("CreatedGroups")
+  groupMembers  GroupMember[]
+  groupMessages GroupMessage[]
+  createdGroups GroupChat[]     @relation("CreatedGroups")
+
+  // Notifications
+  notifications Notification[]
+
+  // Blocks
+  blockedBy Block[] @relation("BlockedBy")
+  blocking  Block[] @relation("Blocking")
 
   @@index([username])
   @@index([email])
-
 }
 
-
 // =========== AI CHAT ==============
-model Conversation{
-  id        String @id @default(cuid())
-  title     String     @default("New chat")
-  model     String     @default("llama-3.3-70b-versatile")
-  pinned    Boolean    @default(false)
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+model Conversation {
+  id        String   @id @default(cuid())
+  title     String   @default("New chat")
+  model     String   @default("llama-3.3-70b-versatile")
+  pinned    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   userId   String
   user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -63,74 +64,72 @@ model Conversation{
 
   @@index([userId])
   @@index([userId, updatedAt(sort: Desc)])
-
 }
 
-model Message{
-  id             String     @id @default(cuid())
-  role           String
-  content        String    @db.Text
-  createdAt      DateTime  @default(now())
+model Message {
+  id        String   @id @default(cuid())
+  role      String
+  content   String   @db.Text
+  createdAt DateTime @default(now())
 
   conversationId String
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
   @@index([conversationId])
   @@index([conversationId, createdAt])
-
 }
 
 // =========== FRIENDS =============
-model Friendship{
-  id          String            @id @default(cuid())
-  status      FriendshipStatus  @default(PENDING) 
-  createdAt   DateTime          @default(now())
+model Friendship {
+  id        String           @id @default(cuid())
+  status    FriendshipStatus @default(PENDING)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
 
-  senderId    String
-  sender      User             @relation("SentRequests", fields:[senderId], references:[id], onDelete: Cascade)
+  senderId   String
+  sender     User   @relation("SentRequests", fields: [senderId], references: [id], onDelete: Cascade)
+  receiverId String
+  receiver   User   @relation("ReceivedRequests", fields: [receiverId], references: [id], onDelete: Cascade)
 
-  receiverId  String 
-  receiver    User             @relation("ReceivedRequests", fields:[receiverId], references:[id], onDelete: Cascade)
-
-  @@unique([senderId,  receiverId])
+  @@unique([senderId, receiverId])
   @@index([receiverId, status])
-  @@index([senderId,   status])
+  @@index([senderId, status])
 }
-
 
 // =========== DIRECT MESSAGES =============
 model DirectMessage {
-  id         String           @id  @default(cuid())
-  content    String           @db.Text
-  status     MessageStatus    @default(SENT) // <- SINGLE / DOUBLE
-  createdAt  DateTime         @default(now())
+  id        String        @id @default(cuid())
+  content   String        @db.Text
+  status    MessageStatus @default(SENT)
+  createdAt DateTime      @default(now())
+  readAt    DateTime?
 
+  // Fix: proper relation syntax
   senderId   String
-  sender     User            @relation("SentMessages", fields:[senderId, references:[id]])
-
+  sender     User   @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
   receiverId String
-  receiver   User           @relation("ReceivedMessages", fields:[receiverId], references:[id])
+  receiver   User   @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
 
-  @@index([senderId,   receiverId])
+  @@index([senderId, receiverId])
   @@index([receiverId, status])
-  @@index([senderId,   createdAt(sort:Desc)])
+  @@index([senderId, createdAt(sort: Desc)])
 }
 
 // ========== GROUP CHAT ==============
-model GroupChat{
-  id           String       @id @default(cuid())
-  name         String
-  avatar       String?
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
+model GroupChat {
+  id        String   @id @default(cuid())
+  name      String
+  avatar    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  createdById  String
-  createdBy    User        @relation("CreatedGroups", fields:[createdById], references:[id])
-  
-  members      GroupMember[]
-  messages     GroupMessage[]
+  createdById String
+  createdBy   User   @relation("CreatedGroups", fields: [createdById], references: [id])
 
-  @@index([updatedAt(sort:Desc)])
+  members  GroupMember[]
+  messages GroupMessage[]
+
+  @@index([updatedAt(sort: Desc)])
 }
 
 model GroupMember {
@@ -145,9 +144,8 @@ model GroupMember {
 
   @@unique([userId, groupChatId])
   @@index([userId])
-   @@index([groupChatId])
+  @@index([groupChatId])
 }
-
 
 model GroupMessage {
   id        String   @id @default(cuid())
@@ -162,6 +160,38 @@ model GroupMessage {
   @@index([groupChatId, createdAt(sort: Desc)])
 }
 
+// ========== NOTIFICATIONS ==============
+model Notification {
+  id        String           @id @default(cuid())
+  type      NotificationType
+  message   String
+  read      Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  // Extra data — jaise friendshipId, messageId etc
+  data      String?          @db.Text
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, read])
+  @@index([userId, createdAt(sort: Desc)])
+}
+
+// ========== BLOCK ==============
+model Block {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+
+  blockerId String
+  blocker   User   @relation("Blocking", fields: [blockerId], references: [id], onDelete: Cascade)
+  blockedId String
+  blocked   User   @relation("BlockedBy", fields: [blockedId], references: [id], onDelete: Cascade)
+
+  @@unique([blockerId, blockedId])
+  @@index([blockerId])
+  @@index([blockedId])
+}
 
 // ========== ENUMS ==========
 enum FriendshipStatus {
@@ -171,13 +201,21 @@ enum FriendshipStatus {
 }
 
 enum MessageStatus {
-  SENT      // ✓  — bheja, deliver nahi
-  DELIVERED // ✓✓ — deliver hua (online tha)
-  READ      // ✓✓ — read kar liya (blue ticks)
+  SENT
+  DELIVERED
+  READ
 }
 
 enum MemberRole {
   ADMIN
   MODERATOR
   MEMBER
+}
+
+enum NotificationType {
+  FRIEND_REQUEST
+  FRIEND_ACCEPTED
+  FRIEND_REJECTED
+  NEW_MESSAGE
+  GROUP_INVITE
 }
