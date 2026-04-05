@@ -21,6 +21,7 @@ model User {
   lastSeen  DateTime?
   provider  String    @default("credentials")
   createdAt DateTime  @default(now())
+  updatedAt DateTime @updatedAt
 
   // AI Chat
   conversations Conversation[]
