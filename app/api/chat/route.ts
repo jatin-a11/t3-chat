@@ -1,29 +1,11 @@
 // app/api/chat/route.ts
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { prisma, withRetry } from "@/lib/prisma";
 import { createGroq } from "@ai-sdk/groq";
 import { streamText } from "ai";
 
 export const maxDuration = 30;
-
-async function safeQuery<T>(fn: () => Promise<T>): Promise<T> {
-  try {
-    return await fn();
-  } catch (err: any) {
-    if (
-      err?.message?.includes("Closed") ||
-      err?.message?.includes("closed") ||
-      err?.code === "P1017" ||
-      err?.code === "P1001"
-    ) {
-      await prisma.$disconnect();
-      await prisma.$connect();
-      return await fn();
-    }
-    throw err;
-  }
-}
 
 export async function POST(req: Request) {
   try {
@@ -38,14 +20,14 @@ export async function POST(req: Request) {
     let convId = conversationId;
 
     if (!convId) {
-      const newConv = await safeQuery(() =>
+      const newConv = await withRetry(() =>
         prisma.conversation.create({
           data: { userId: session.user.id, model, title: "New Chat" },
         })
       );
       convId = newConv.id;
     } else {
-      const conv = await safeQuery(() =>
+      const conv = await withRetry(() =>
         prisma.conversation.findFirst({
           where: { id: convId, userId: session.user.id },
         })
@@ -59,7 +41,7 @@ export async function POST(req: Request) {
         ? lastMessage.content
         : JSON.stringify(lastMessage.content);
 
-    await safeQuery(() =>
+    await withRetry(() =>
       prisma.message.create({
         data: { role: "user", content: lastContent, conversationId: convId },
       })
@@ -79,7 +61,7 @@ export async function POST(req: Request) {
       system: "You are a helpful assistant. Answer clearly and concisely.",
       onFinish: async ({ text }) => {
         try {
-          await safeQuery(() =>
+          await withRetry(() =>
             prisma.message.create({
               data: {
                 role: "assistant",
@@ -88,7 +70,7 @@ export async function POST(req: Request) {
               },
             })
           );
-          await safeQuery(() =>
+          await withRetry(() =>
             prisma.conversation.update({
               where: { id: convId },
               data: {
@@ -105,7 +87,6 @@ export async function POST(req: Request) {
       },
     });
 
-    // Plain text stream — manual fetch reader ke saath compatible
     return result.toTextStreamResponse({
       headers: { "x-conversation-id": convId },
     });
