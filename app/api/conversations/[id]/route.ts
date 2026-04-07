@@ -1,81 +1,67 @@
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 
+export async function GET(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.id) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
-// Ek conversation + message fetch
-export async function GET(req:Request,
-  {params}:{params:{id:string}}){
-    const session = await getServerSession(authOptions)
+  const { id } = await params; // ← await
 
-    if(!session?.user?.id){
-      return Response.json({error:"login kro"}, {status:401})
-    }
+  const conversation = await prisma.conversation.findFirst({
+    where: { id, userId: session.user.id },
+    include: { messages: { orderBy: { createdAt: "asc" } } },
+  });
 
-    const conversation = await prisma.conversation.findFirst({
-      where:{
-        id: params.id,
-        userId: session.user.id
-      },
-      include:{
-        messages:{
-          orderBy:{createdAt:"asc"}
-        }
-      }
-    })
+  if (!conversation) {
+    return Response.json({ error: "Not found" }, { status: 404 });
+  }
 
-    if(!conversation){
-      return Response.json({error:"nahi mili"}, {status:404})
-    }
-
-    return Response.json(conversation)
-
+  return Response.json({ success: true, data: conversation });
 }
 
-// Rename ya pin
-
-export async function PATCH(req:Request,
-  {params}:{params:{id:string}}
+export async function PATCH(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await getServerSession(authOptions)
-
-  if(!session?.user?.id){
-    return Response.json({error:"login kro phle"},{status:401})
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.id) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
-  
-  const body = await req.json()
+
+  const { id } = await params; // ← await
+  const body = await req.json();
 
   await prisma.conversation.updateMany({
-    where:{
-      id:params.id,
-      userId:session?.user.id
+    where: { id, userId: session.user.id },
+    data: {
+      ...(body.title !== undefined && { title: body.title }),
+      ...(body.pinned !== undefined && { pinned: body.pinned }),
     },
-    data:{
-      ...(body.title !== undefined && {title: body.title}),
-      ...(body.pinned !== undefined && {pinned:body.pinned})
-    }
-  })
-  return Response.json({success:true})
+  });
+
+  return Response.json({ success: true });
 }
 
-// Delete
-
 export async function DELETE(
-  req:Request,
-{params}:{params:{id:string}}
-){
-  const session = await getServerSession(authOptions)
-
-  if(!session?.user?.id){
-    return Response.json({error:"login kro"}, {status:401})
+  req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.id) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  await prisma.conversation.deleteMany({
-    where:{
-      id: params.id,
-      userId: session?.user.id
-    }
-  })
+  const { id } = await params; // ← await
 
-  return Response.json({success:true})
+  await prisma.conversation.deleteMany({
+    where: { id, userId: session.user.id },
+  });
+
+  return Response.json({ success: true });
 }
