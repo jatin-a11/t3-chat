@@ -46,6 +46,11 @@ model User {
   blockedBy Block[] @relation("BlockedBy")
   blocking  Block[] @relation("Blocking")
 
+  // Subscription
+  subscription Subscription?
+  payments     Payment[]
+  dailyUsage   DailyUsage[]
+
   @@index([username])
   @@index([email])
 }
@@ -220,3 +225,66 @@ enum NotificationType {
   NEW_MESSAGE
   GROUP_INVITE
 }
+
+
+model Subscription {
+  id        String           @id @default(cuid())
+  plan      PlanType             @default(FREE)
+  status    SubscriptionStatus   @default(ACTIVE)
+  startDate DateTime             @default(now())
+  endDate   DateTime?
+  createdAt DateTime            @default(now())
+  updatedAt DateTime            @updatedAt
+
+  userId   String              @unique
+  user     User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Payment {
+  id              String        @id @default(cuid())
+  amount          Int           // Paise mein — 29900 = ₹299
+  currency        String        @default("INR")
+  status          PaymentStatus @default(CREATED)
+  razorpayOrderId String?       @unique
+  razorpayPayId   String?       @unique
+  plan            PlanType
+  createdAt       DateTime      @default(now())
+
+  userId         String
+  user           User          @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+}
+
+model DailyUsage {
+  id        String       @id @default(cuid())
+  date      String   // "2026-04-05" format
+  count     Int          @default(0)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  userId   String
+  user     User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+  @@index([userId, date])
+}
+
+enum PlanType {
+  FREE
+  PRO
+  ENTERPRISE
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  EXPIRED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  CREATED
+  PAID
+  FAILED
+  REFUNDED
+} 
