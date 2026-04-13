@@ -1,9 +1,11 @@
+
 // app/api/chat/route.ts
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma, withRetry } from "@/lib/prisma";
 import { createGroq } from "@ai-sdk/groq";
 import { streamText } from "ai";
+import { canSendMessage, incrementUsage } from "@/lib/usage";
 
 export const maxDuration = 30;
 
@@ -13,6 +15,25 @@ export async function POST(req: Request) {
     if (!session?.user?.id) {
       return Response.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    // Daily limit Check
+    const limitCheck = await canSendMessage(session.user.id)
+
+    if (!limitCheck.allowed){
+      return Response.json({
+        error:"Daily limit reach ho gai",
+        code:"LIMIT_EXCEEDED",
+        used: limitCheck.used,
+        limit: limitCheck.limit,
+        plan: limitCheck.plan,
+         message:
+          limitCheck.plan === "FREE"
+            ? `Free plan mein sirf ${limitCheck.limit} messages per day. Pro upgrade karo!`
+            : `Aaj ki limit ${limitCheck.limit} messages reach ho gayi.`,
+      },{status:429}
+    )
+    }
+
 
     const body = await req.json();
     const { messages, conversationId, model = "llama-3.3-70b-versatile" } = body;
@@ -40,6 +61,15 @@ export async function POST(req: Request) {
       typeof lastMessage.content === "string"
         ? lastMessage.content
         : JSON.stringify(lastMessage.content);
+
+        // Usage increment karo — pehle message save karo
+        await Promise.all([
+    prisma.message.create({
+      data: { role: "user", content: lastContent, conversationId: convId },
+    }),
+    incrementUsage(session.user.id), // ← Daily count badha do
+  ]);
+
 
     await withRetry(() =>
       prisma.message.create({
